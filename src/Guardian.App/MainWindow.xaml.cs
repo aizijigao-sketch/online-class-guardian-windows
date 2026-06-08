@@ -108,7 +108,7 @@ public partial class MainWindow : Window
         _configStore.Save(_config);
         EnsureDaemon();
         RefreshUi();
-        _notifyIcon?.ShowBalloonTip(1800, "网课模式已开启", "现在会拦截浏览器、游戏和聊天软件。", Forms.ToolTipIcon.Info);
+        _notifyIcon?.ShowBalloonTip(1800, "网课模式已开启", "现在会拦截浏览器、游戏、聊天、音乐和下载软件。", Forms.ToolTipIcon.Info);
     }
 
     private void DisableLockModeWithPassword()
