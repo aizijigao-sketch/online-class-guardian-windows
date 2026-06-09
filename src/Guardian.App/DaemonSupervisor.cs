@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.IO;
+using Guardian.Shared;
+using Guardian.Shared.Services;
 
 namespace Guardian.App;
 
@@ -7,10 +9,17 @@ public sealed class DaemonSupervisor
 {
     private const string DaemonProcessName = "Guardian.Daemon";
     private const string DaemonExecutableName = "Guardian.Daemon.exe";
-    private const string TaskName = "OnlineClassGuardian";
+    private readonly WindowsServiceManager _serviceManager = new();
 
-    public bool IsDaemonRunning() =>
-        Process.GetProcessesByName(DaemonProcessName).Any(p =>
+    public bool IsDaemonRunning()
+    {
+        var service = _serviceManager.Query();
+        if (service.IsRunning)
+        {
+            return true;
+        }
+
+        return Process.GetProcessesByName(DaemonProcessName).Any(p =>
         {
             try
             {
@@ -25,21 +34,10 @@ public sealed class DaemonSupervisor
                 p.Dispose();
             }
         });
+    }
 
     public bool TryEnsureDaemonRunning(out string message)
     {
-        if (IsDaemonRunning())
-        {
-            message = "正在运行";
-            return true;
-        }
-
-        if (TryRunScheduledTask(out var taskMessage))
-        {
-            message = taskMessage;
-            return true;
-        }
-
         var daemonPath = FindDaemonExecutable();
         if (daemonPath is null)
         {
@@ -47,70 +45,65 @@ public sealed class DaemonSupervisor
             return false;
         }
 
+        var serviceStatus = _serviceManager.Query();
+        if (serviceStatus.Exists &&
+            serviceStatus.HasExpectedBinary(daemonPath) &&
+            serviceStatus.HasExpectedConfig(AppPaths.ConfigPath))
+        {
+            if (serviceStatus.IsRunning)
+            {
+                message = "服务正在运行";
+                return true;
+            }
+
+            var start = _serviceManager.Start();
+            if (start.Success)
+            {
+                message = "服务已启动";
+                return true;
+            }
+        }
+
+        if (TryRunElevatedServiceCommand(daemonPath, "--install-service", "--start-service", "--config", AppPaths.ConfigPath))
+        {
+            message = serviceStatus.Exists ? "已请求管理员权限修复并启动服务" : "已请求管理员权限安装并启动服务";
+            return true;
+        }
+
+        if (TryRunElevatedServiceCommand(daemonPath, "--config", AppPaths.ConfigPath))
+        {
+            message = "已请求管理员权限临时启动守护进程";
+            return true;
+        }
+
+        message = "服务未就绪，请确认已允许管理员权限。";
+        return false;
+    }
+
+    private static bool TryRunElevatedServiceCommand(string daemonPath, params string[] arguments)
+    {
         try
         {
             Process.Start(new ProcessStartInfo
             {
                 FileName = daemonPath,
+                Arguments = string.Join(" ", arguments.Select(QuoteArgument)),
                 WorkingDirectory = Path.GetDirectoryName(daemonPath) ?? AppContext.BaseDirectory,
                 UseShellExecute = true,
                 Verb = "runas"
             });
-            message = "已请求管理员权限启动守护进程。";
             return true;
         }
-        catch (Exception ex)
+        catch
         {
-            message = $"启动失败：{ex.Message}。请用家长工具重新安装开机启动任务。";
             return false;
         }
     }
 
-    private static bool TryRunScheduledTask(out string message)
-    {
-        try
-        {
-            using var query = Process.Start(new ProcessStartInfo
-            {
-                FileName = "schtasks.exe",
-                Arguments = $"/Query /TN {TaskName}",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            });
-            query?.WaitForExit(3000);
-            if (query is null || query.ExitCode != 0)
-            {
-                message = "未安装管理员启动任务。";
-                return false;
-            }
-
-            using var run = Process.Start(new ProcessStartInfo
-            {
-                FileName = "schtasks.exe",
-                Arguments = $"/Run /TN {TaskName}",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            });
-            run?.WaitForExit(3000);
-            if (run is not null && run.ExitCode == 0)
-            {
-                message = "已通过管理员计划任务启动。";
-                return true;
-            }
-
-            message = "计划任务启动失败，请重新安装开机启动任务。";
-            return false;
-        }
-        catch (Exception ex)
-        {
-            message = $"计划任务检查失败：{ex.Message}";
-            return false;
-        }
-    }
+    private static string QuoteArgument(string argument) =>
+        argument.Contains(' ') || argument.Contains('"')
+            ? $"\"{argument.Replace("\"", "\\\"")}\""
+            : argument;
 
     private static string? FindDaemonExecutable()
     {

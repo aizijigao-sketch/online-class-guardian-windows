@@ -7,7 +7,7 @@ Online Class Guardian is a local Windows tool for parents who need a focused onl
 - Manual enable/disable of online-class mode.
 - Parent password required to disable locked mode.
 - Lock state persists after restart.
-- Elevated scheduled task support for stronger process termination.
+- Windows Service support for startup persistence and stronger process termination.
 - Allows Tencent Meeting and common local document/image tools.
 - Blocks common distraction software by process name, path keyword, and window title.
 - Keeps network proxy tools such as v2rayN, Clash, and Shadowsocks out of the block list.
@@ -17,7 +17,7 @@ Online Class Guardian is a local Windows tool for parents who need a focused onl
 ## Projects
 
 - `Guardian.Shared`: configuration, password hashing, default rules, matching, logging, and reminder selection.
-- `Guardian.Daemon`: background monitor that closes blocked processes.
+- `Guardian.Daemon`: Windows Service-capable background monitor that closes blocked processes.
 - `Guardian.App`: WPF tray/control app for parents.
 - `Guardian.Recovery`: parent recovery utility.
 - `Guardian.Shared.Tests`: unit tests for core behavior.
@@ -37,7 +37,9 @@ dotnet publish .\src\Guardian.Daemon\Guardian.Daemon.csproj -c Release -r win-x6
 dotnet publish .\src\Guardian.Recovery\Guardian.Recovery.csproj -c Release -r win-x64 --self-contained false -o .\outputs\OnlineClassGuardian-Admin\ParentRecovery\Recovery
 ```
 
-After publishing, run `scripts\install-startup-task.ps1` from an elevated PowerShell, passing the daemon path if needed.
+After publishing, start `outputs\OnlineClassGuardian-Admin\App\Guardian.App.exe`. The parent app checks whether the Windows Service is installed and points at the current daemon/config paths. If the service is missing or stale, it asks for administrator permission and installs or repairs it automatically.
+
+The scripts in `scripts\` and `outputs\OnlineClassGuardian-Admin\ParentRecovery\` are fallback recovery helpers only; normal use should go through the parent app.
 
 ## Privacy And Safety
 

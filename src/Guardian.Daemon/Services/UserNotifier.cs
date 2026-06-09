@@ -15,7 +15,8 @@ public sealed class UserNotifier
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
-            process.StartInfo.ArgumentList.Add(Environment.UserName);
+            process.StartInfo.ArgumentList.Add("*");
+            process.StartInfo.ArgumentList.Add("/TIME:8");
             process.StartInfo.ArgumentList.Add(message);
             process.Start();
         }

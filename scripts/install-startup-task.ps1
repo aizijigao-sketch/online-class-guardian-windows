@@ -1,13 +1,14 @@
 param(
-    [string]$DaemonPath = ""
+    [string]$DaemonPath = "",
+    [string]$ConfigPath = ""
 )
 
 $ErrorActionPreference = "Stop"
-$TaskName = "OnlineClassGuardian"
+$ServiceName = "OnlineClassGuardianService"
 
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Host "[FAILED] Please run this script as Administrator."
+    Write-Host "[FAILED] 请以管理员身份运行。"
     exit 1
 }
 
@@ -17,35 +18,28 @@ if ([string]::IsNullOrWhiteSpace($DaemonPath)) {
     $DaemonPath = [System.IO.Path]::GetFullPath($DaemonPath)
 }
 
+if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
+    $ConfigPath = Join-Path $env:APPDATA "OnlineClassGuardian\config.json"
+}
+
 if (-not (Test-Path $DaemonPath)) {
     Write-Host "[FAILED] Guardian.Daemon.exe not found:"
     Write-Host $DaemonPath
     exit 1
 }
 
-$CurrentUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-$WorkingDir = Split-Path -Parent $DaemonPath
-
-Write-Host "[INFO] Task name: $TaskName"
-Write-Host "[INFO] User: $CurrentUser"
+Write-Host "[INFO] Service name: $ServiceName"
 Write-Host "[INFO] Daemon path: $DaemonPath"
+Write-Host "[INFO] Config path: $ConfigPath"
 
 try {
-    $Action = New-ScheduledTaskAction -Execute $DaemonPath -WorkingDirectory $WorkingDir
-    $Trigger = New-ScheduledTaskTrigger -AtLogOn -User $CurrentUser
-    $Principal = New-ScheduledTaskPrincipal -UserId $CurrentUser -LogonType Interactive -RunLevel Highest
-    $Settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Seconds 0)
-
-    Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Principal $Principal -Settings $Settings -Force | Out-Null
-
-    Write-Host "[OK] Created elevated startup task: $TaskName"
-    Write-Host "[OK] Daemon path: $DaemonPath"
+    & $DaemonPath --install-service --start-service --config $ConfigPath
+    Start-Sleep -Seconds 2
+    sc.exe query $ServiceName | Out-Host
+    Write-Host "[OK] 已请求安装并启动 Windows Service。"
     exit 0
 } catch {
-    Write-Host "[FAILED] Could not create startup task."
+    Write-Host "[FAILED] Could not install/start service."
     Write-Host "[ERROR] $($_.Exception.Message)"
-    if ($_.Exception.InnerException) {
-        Write-Host "[ERROR-INNER] $($_.Exception.InnerException.Message)"
-    }
     exit 1
 }

@@ -22,10 +22,10 @@ catch (Exception ex)
     Console.WriteLine($"[失败] 无法保存恢复配置：{ex.Message}");
 }
 
+RemoveWindowsService();
+DeleteStartupTask();
 StopProcessByName(DaemonProcessName);
 StopProcessByName(AppProcessName);
-
-DeleteStartupTask();
 
 Console.WriteLine("恢复流程完成。默认不会删除日志文件。");
 Environment.ExitCode = exitCode;
@@ -39,6 +39,15 @@ static void DisableLockMode()
     store.Save(config);
 
     Console.WriteLine($"[完成] 已关闭网课模式：{store.ConfigPath}");
+}
+
+static void RemoveWindowsService()
+{
+    var manager = new WindowsServiceManager();
+    var result = manager.Remove();
+    Console.WriteLine(result.Success
+        ? $"[完成] {result.Message}"
+        : $"[提示] {result.Message}");
 }
 
 static void StopProcessByName(string processName)
